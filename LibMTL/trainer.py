@@ -74,7 +74,7 @@ class Trainer(nn.Module):
 
     '''
     def __init__(self, task_dict, weighting, architecture, encoder_class, decoders, 
-                 rep_grad, multi_input, optim_param, scheduler_param, **kwargs):
+                 rep_grad, multi_input, optim_param, scheduler_param, wandb_run=None, **kwargs):
         super(Trainer, self).__init__()
         
         self.device = torch.device('cuda:0')
@@ -84,6 +84,7 @@ class Trainer(nn.Module):
         self.task_name = list(task_dict.keys())
         self.rep_grad = rep_grad
         self.multi_input = multi_input
+        self.wandb_run = wandb_run
 
         self._prepare_model(weighting, architecture, encoder_class, decoders)
         self._prepare_optimizer(optim_param, scheduler_param)
@@ -226,7 +227,23 @@ class Trainer(nn.Module):
             self.meter.get_score()
             self.model.train_loss_buffer[:, epoch] = self.meter.loss_item
             self.meter.display(epoch=epoch, mode='train')
+
+            if self.wandb_run:
+                self.wandb_run.log({
+                    'losses' : {
+                        'train': {k : v for k,v in zip(self.meter.task_name,
+                            self.meter.loss_item)}
+                    },
+                    'metrics' : {
+                        'train': {
+                            task : {
+                                metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
+                            } for task in self.meter.task_name
+                        }
+                    }
+                })
             self.meter.reinit()
+
             
             if val_dataloaders is not None:
                 self.meter.has_val = True
