@@ -24,7 +24,7 @@ def parse_args(parser):
     return parser.parse_args()
     
 def main(params):
-    run = wandb.init('LibMTL-NYUD')
+    run = wandb.init()
 
     kwargs, optim_param, scheduler_param = prepare_args(params)
 
@@ -78,7 +78,7 @@ def main(params):
     
     class NYUtrainer(Trainer):
         def __init__(self, task_dict, weighting, architecture, encoder_class, 
-                     decoders, rep_grad, multi_input, optim_param, scheduler_param, **kwargs):
+                     decoders, rep_grad, multi_input, optim_param, scheduler_param, wandb_run, **kwargs):
             super(NYUtrainer, self).__init__(task_dict=task_dict, 
                                             weighting=weighting_method.__dict__[weighting], 
                                             architecture=architecture_method.__dict__[architecture], 
@@ -88,6 +88,7 @@ def main(params):
                                             multi_input=multi_input,
                                             optim_param=optim_param,
                                             scheduler_param=scheduler_param,
+                                            wandb_run=wandb_run,
                                             **kwargs)
 
         def process_preds(self, preds):
@@ -105,6 +106,7 @@ def main(params):
                           multi_input=params.multi_input,
                           optim_param=optim_param,
                           scheduler_param=scheduler_param,
+                          wandb_run=run,
                           **kwargs)
     NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, 200)
     

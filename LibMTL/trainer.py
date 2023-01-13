@@ -129,10 +129,10 @@ class Trainer(nn.Module):
 
     def _process_data(self, loader):
         try:
-            data, label = loader[1].next()
+            data, label = next(loader[1])
         except:
             loader[1] = iter(loader[0])
-            data, label = loader[1].next()
+            data, label = next(loader[1])
         data = data.to(self.device, non_blocking=True)
         if not self.multi_input:
             for task in self.task_name:
@@ -228,7 +228,7 @@ class Trainer(nn.Module):
             self.model.train_loss_buffer[:, epoch] = self.meter.loss_item
             self.meter.display(epoch=epoch, mode='train')
 
-            if self.wandb_run:
+            if self.wandb_run is not None:
                 self.wandb_run.log({
                     'losses' : {
                         'train': {k : v for k,v in zip(self.meter.task_name,
@@ -289,4 +289,20 @@ class Trainer(nn.Module):
         self.meter.record_time('end')
         self.meter.get_score()
         self.meter.display(epoch=epoch, mode=mode)
+
+        if self.wandb_run is not None:
+                print('logging metrics and losses')
+                self.wandb_run.log({
+                    'losses' : {
+                        'test': {k : v for k,v in zip(self.meter.task_name,
+                            self.meter.loss_item)}
+                    },
+                    'metrics' : {
+                        'test': {
+                            task : {
+                                metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
+                            } for task in self.meter.task_name
+                        }
+                    }
+                })
         self.meter.reinit()
