@@ -13,6 +13,8 @@ from LibMTL.config import LibMTL_args, prepare_args
 import LibMTL.weighting as weighting_method
 import LibMTL.architecture as architecture_method
 
+import wandb
+
 def parse_args(parser):
     parser.add_argument('--aug', action='store_true', default=False, help='data augmentation')
     parser.add_argument('--train_mode', default='trainval', type=str, help='trainval, train')
@@ -22,7 +24,17 @@ def parse_args(parser):
     return parser.parse_args()
     
 def main(params):
+    run = wandb.init('LibMTL-NYUD')
+
     kwargs, optim_param, scheduler_param = prepare_args(params)
+
+    wandb.config.update(
+        {
+            'cli' : params,
+            'opt' : optim_param,
+            'scheduler' : scheduler_param
+        }
+    )
 
     # prepare dataloaders
     nyuv2_train_set = NYUv2(root=params.dataset_path, mode=params.train_mode, augmentation=params.aug)
