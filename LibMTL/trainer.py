@@ -196,6 +196,12 @@ class Trainer(nn.Module):
         self.batch_weight = np.zeros([self.task_num, epochs, train_batch])
         self.model.train_loss_buffer = np.zeros([self.task_num, epochs])
         self.model.epochs = epochs
+        a12_list = []
+        a13_list = []
+        a23_list = []
+        m1_list = []
+        m2_list = []
+        m3_list = []
         for epoch in range(epochs):
             self.model.epoch = epoch
             self.model.train()
@@ -218,6 +224,26 @@ class Trainer(nn.Module):
                         self.meter.update(train_pred, train_gt, task)
 
                 self.optimizer.zero_grad()
+                grads = self.model._get_grads(train_losses, 'autograd')
+                grads = grads.cpu().detach().numpy()
+                norms = np.linalg.norm(grads, axis=1)
+                m1_list.append(norms[0])
+                m2_list.append(norms[1])
+                m3_list.append(norms[2])
+                
+                a12 = np.dot(grads[0, :], grads[1, :])
+                a13 = np.dot(grads[0, :], grads[2, :])
+                a23 = np.dot(grads[1, :], grads[2, :])
+
+                a12 = np.arccos(a12/(norms[0]*norms[1]))
+                a12_list.append(a12)
+                a13 = np.arccos(a13/(norms[0]*norms[2]))
+                a13_list.append(a13)
+                a23 = np.arccos(a23/(norms[1]*norms[2]))
+                a23_list.append(a23)
+                with open('angles.csv', 'a+') as f:
+                    f.write("%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n" % (epoch, batch_index,
+                                                        a12, a13, a23, norms[0], norms[1], norms[2]))
                 w = self.model.backward(train_losses, **self.kwargs['weight_args'])
                 if w is not None:
                     self.batch_weight[:, epoch, batch_index] = w
@@ -240,9 +266,28 @@ class Trainer(nn.Module):
                                 metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
                             } for task in self.meter.task_name
                         }
+                    },
+                    'gradient' : {
+                        'angles' : {
+                            '12' : sum(a12_list) / len(a12_list),
+                            '13' : sum(a13_list) / len(a13_list),
+                            '23' : sum(a23_list) / len(a23_list)
+                        }, 
+                        'magnitudes' : {
+                            '1' : sum(m1_list) / len(m1_list),
+                            '2' : sum(m2_list) / len(m2_list),
+                            '3' : sum(m3_list) / len(m3_list)
+                        }
                     }
                 })
             self.meter.reinit()
+            a12_list = []
+            a13_list = []
+            a23_list = []
+            m1_list = []
+            m2_list = []
+            m3_list = []
+            
 
             
             if val_dataloaders is not None:
