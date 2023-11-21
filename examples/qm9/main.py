@@ -64,7 +64,7 @@ def main(params):
             return data
 
     transform = T.Compose([Complete(), T.Distance(norm=False)])
-    dataset = QM9(params.dataset_path, transform=transform).shuffle()
+    dataset = QM9(params.dataset_path, transform=transform)
 
     # Normalize targets to mean = 0 and std = 1.
     mean = dataset.data.y.mean(dim=0, keepdim=True)
@@ -87,13 +87,14 @@ def main(params):
             return data, label
 
     # Split datasets.
-    test_dataset = QM9Dataset(dataset[:10000], target)
-    val_dataset = QM9Dataset(dataset[10000:20000], target)
-    train_dataset = QM9Dataset(dataset[20000:], target)
+    split = torch.load('./random_split.t')
+    test_dataset = QM9Dataset(dataset[split][:10000], target)
+    val_dataset = QM9Dataset(dataset[split][10000:20000], target)
+    train_dataset = QM9Dataset(dataset[split][20000:], target)
 
-    test_loader = DataLoader(test_dataset, batch_size=params.bs, shuffle=False)
-    val_loader = DataLoader(val_dataset, batch_size=params.bs, shuffle=False)
-    train_loader = DataLoader(train_dataset, batch_size=params.bs, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=params.bs, shuffle=False, num_workers=2, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=params.bs, shuffle=False, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=params.bs, shuffle=True, num_workers=2, pin_memory=True)
 
     # define tasks
     task_dict = {}
@@ -161,8 +162,15 @@ def main(params):
                           multi_input=params.multi_input,
                           optim_param=optim_param,
                           scheduler_param=scheduler_param,
+                          save_path=params.save_path,
+                          load_path=params.load_path,
                           **kwargs)
-    QM9model.train(train_loader, test_loader, params.epochs, val_dataloaders=val_loader)
+    if params.mode == 'train':
+        QM9model.train(train_loader, test_loader, params.epochs, val_dataloaders=val_loader)
+    elif params.mode == 'test':
+        QM9model.test(test_loader)
+    else:
+        raise ValueError
     
 if __name__ == "__main__":
     params = parse_args(LibMTL_args)

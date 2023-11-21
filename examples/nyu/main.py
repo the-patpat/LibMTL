@@ -94,8 +94,15 @@ def main(params):
                           multi_input=params.multi_input,
                           optim_param=optim_param,
                           scheduler_param=scheduler_param,
+                          save_path=params.save_path,
+                          load_path=params.load_path,
                           **kwargs)
-    NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, params.epochs)
+    if params.mode == 'train':
+        NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, params.epochs)
+    elif params.mode == 'test':
+        NYUmodel.test(nyuv2_test_loader)
+    else:
+        raise ValueError
     
 if __name__ == "__main__":
     params = parse_args(LibMTL_args)

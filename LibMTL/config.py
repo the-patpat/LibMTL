@@ -4,6 +4,7 @@ import torch
 
 _parser = argparse.ArgumentParser(description='Configuration for LibMTL')
 # general
+_parser.add_argument('--mode', type=str, default='train', help='train, test')
 _parser.add_argument('--seed', type=int, default=0, help='random seed')
 _parser.add_argument('--gpu_id', default='0', type=str, help='gpu_id') 
 _parser.add_argument('--weighting', type=str, default='EW',
@@ -15,6 +16,10 @@ _parser.add_argument('--rep_grad', action='store_true', default=False,
                     help='computing gradient for representation or sharing parameters')
 _parser.add_argument('--multi_input', action='store_true', default=False, 
                     help='whether each task has its own input data')
+_parser.add_argument('--save_path', type=str, default=None, 
+                    help='save path')
+_parser.add_argument('--load_path', type=str, default=None, 
+                    help='load ckpt path')
 ## optim
 _parser.add_argument('--optim', type=str, default='adam',
                     help='optimizer for training, option: adam, sgd, adagrad, rmsprop')
@@ -34,7 +39,9 @@ _parser.add_argument('--T', type=float, default=2.0, help='T for DWA')
 _parser.add_argument('--mgda_gn', default='none', type=str, 
                     help='type of gradient normalization for MGDA, option: l2, none, loss, loss+')
 ## GradVac
-_parser.add_argument('--beta', type=float, default=0.5, help='beta for GradVac')
+_parser.add_argument('--GradVac_beta', type=float, default=0.5, help='beta for GradVac')
+_parser.add_argument('--GradVac_group_type', type=int, default=0, 
+                    help='parameter granularity for GradVac (0: whole_model; 1: all_layer; 2: all_matrix)')
 ## GradNorm
 _parser.add_argument('--alpha', type=float, default=1.5, help='alpha for GradNorm')
 ## GradDrop
@@ -46,6 +53,12 @@ _parser.add_argument('--rescale', type=int, default=1, help='rescale for CAGrad'
 _parser.add_argument('--update_weights_every', type=int, default=1, help='update_weights_every for Nash_MTL')
 _parser.add_argument('--optim_niter', type=int, default=20, help='optim_niter for Nash_MTL')
 _parser.add_argument('--max_norm', type=float, default=1.0, help='max_norm for Nash_MTL')
+## MoCo
+_parser.add_argument('--MoCo_beta', type=float, default=0.5, help='MoCo_beta for MoCo')
+_parser.add_argument('--MoCo_beta_sigma', type=float, default=0.5, help='MoCo_beta_sigma for MoCo')
+_parser.add_argument('--MoCo_gamma', type=float, default=0.1, help='gamma for MoCo')
+_parser.add_argument('--MoCo_gamma_sigma', type=float, default=0.5, help='MoCo_gamma_sigma for MoCo')
+_parser.add_argument('--MoCo_rho', type=float, default=0, help='MoCo_rho for MoCo')
 
 # args for architecture
 ## CGC
@@ -66,7 +79,8 @@ def prepare_args(params):
     """
     kwargs = {'weight_args': {}, 'arch_args': {}}
     if params.weighting in ['EW', 'UW', 'GradNorm', 'GLS', 'RLW', 'MGDA', 'IMTL',
-                            'PCGrad', 'GradVac', 'CAGrad', 'GradDrop', 'DWA', 'Nash_MTL']:
+                            'PCGrad', 'GradVac', 'CAGrad', 'GradDrop', 'DWA', 
+                            'Nash_MTL', 'MoCo', 'Aligned_MTL']:
         if params.weighting in ['DWA']:
             if params.T is not None:
                 kwargs['weight_args']['T'] = params.T
@@ -86,8 +100,9 @@ def prepare_args(params):
             else:
                 raise ValueError('MGDA needs keywaord mgda_gn')
         elif params.weighting in ['GradVac']:
-            if params.beta is not None:
-                kwargs['weight_args']['beta'] = params.beta
+            if params.GradVac_beta is not None:
+                kwargs['weight_args']['GradVac_beta'] = params.GradVac_beta
+                kwargs['weight_args']['GradVac_group_type'] = params.GradVac_group_type
             else:
                 raise ValueError('GradVac needs keywaord beta')
         elif params.weighting in ['GradDrop']:
@@ -108,6 +123,12 @@ def prepare_args(params):
                 kwargs['weight_args']['max_norm'] = params.max_norm
             else:
                 raise ValueError('Nash_MTL needs update_weights_every, optim_niter, and max_norm')
+        elif params.weighting in ['MoCo']:
+            kwargs['weight_args']['MoCo_beta'] = params.MoCo_beta
+            kwargs['weight_args']['MoCo_beta_sigma'] = params.MoCo_beta_sigma
+            kwargs['weight_args']['MoCo_gamma'] = params.MoCo_gamma
+            kwargs['weight_args']['MoCo_gamma_sigma'] = params.MoCo_gamma_sigma
+            kwargs['weight_args']['MoCo_rho'] = params.MoCo_rho
     else:
         raise ValueError('No support weighting method {}'.format(params.weighting)) 
         
@@ -146,11 +167,14 @@ def prepare_args(params):
 def _display(params, kwargs, optim_param, scheduler_param):
     print('='*40)
     print('General Configuration:')
+    print('\tMode:', params.mode)
     print('\tWighting:', params.weighting)
     print('\tArchitecture:', params.arch)
     print('\tRep_Grad:', params.rep_grad)
     print('\tMulti_Input:', params.multi_input)
     print('\tSeed:', params.seed)
+    print('\tSave Path:', params.save_path)
+    print('\tLoad Path:', params.load_path)
     print('\tDevice: {}'.format('cuda:'+params.gpu_id if torch.cuda.is_available() else 'cpu'))
     for wa, p in zip(['weight_args', 'arch_args'], [params.weighting, params.arch]):
         if kwargs[wa] != {}:
