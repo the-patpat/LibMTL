@@ -6,6 +6,22 @@ import numpy as np
 from LibMTL._record import _PerformanceMeter
 from LibMTL.utils import count_parameters
 
+def get_cosine_similarities(grads):
+    """Calculates cosine similarities between gradients
+    Calculates the cosine similarities between gradient vectors, packed in
+    a numpy nd array. All of the gradients have the same amount of elements.
+
+    Args:
+        grads (numpy.ndarray): ndarray of shape (n_grads, n_elements)
+
+    Returns:
+        numpy.ndarray: ndarray of shape(n_grads, n_grads) symmetric matrix of cosine similarities
+    """
+    gg = grads @ grads.T
+    length = np.sqrt(np.diag(gg)).reshape(-1,1)
+    cos_sim = gg / (length @ length.T)
+    return cos_sim
+
 class Trainer(nn.Module):
     r'''A Multi-Task Learning Trainer.
 
@@ -206,8 +222,9 @@ class Trainer(nn.Module):
         self.batch_weight = np.zeros([self.task_num, epochs, train_batch])
         self.model.train_loss_buffer = np.zeros([self.task_num, epochs])
         self.model.epochs = epochs
+        self.model._compute_grad_dim() 
         gradient_storage = np.zeros((epochs,
-                              train_batch, self.model._compute_grad_dim()))
+                              train_batch, self.task_num, self.task_num))
         for epoch in range(epochs):
             self.model.epoch = epoch
             self.model.train()
@@ -231,7 +248,8 @@ class Trainer(nn.Module):
                 self.optimizer.zero_grad()
                 grads = self.model._get_grads(train_losses, 'autograd')
                 grads = grads.detach().cpu().numpy()
-                gradient_storage[epoch, batch_index] = grads
+                csim = get_cosine_similarities(grads)
+                gradient_storage[epoch, batch_index] = csim.copy()
                 w = self.model.backward(train_losses, **self.kwargs['weight_args'])
                 if w is not None:
                     self.batch_weight[:, epoch, batch_index] = w
@@ -254,30 +272,9 @@ class Trainer(nn.Module):
                                 metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
                             } for task in self.meter.task_name
                         }
-                    },
-                    'gradient' : {
-                        'angles' : {
-                            '12' : sum(a12_list) / len(a12_list),
-                            '13' : sum(a13_list) / len(a13_list),
-                            '23' : sum(a23_list) / len(a23_list)
-                        }, 
-                        'magnitudes' : {
-                            '1' : sum(m1_list) / len(m1_list),
-                            '2' : sum(m2_list) / len(m2_list),
-                            '3' : sum(m3_list) / len(m3_list)
-                        }
                     }
                 })
             self.meter.reinit()
-            a12_list = []
-            a13_list = []
-            a23_list = []
-            m1_list = []
-            m2_list = []
-            m3_list = []
-            
-
-            
             if val_dataloaders is not None:
                 self.meter.has_val = True
                 val_improvement = self.test(val_dataloaders, epoch, mode='val', return_improvement=True)
@@ -293,6 +290,7 @@ class Trainer(nn.Module):
         self.meter.display_best_result()
         if return_weight:
             return self.batch_weight
+        np.savez('gradients.npz', gradient_storage)
 
 
     def test(self, test_dataloaders, epoch=None, mode='test', return_improvement=False):
@@ -333,11 +331,11 @@ class Trainer(nn.Module):
                 print('logging metrics and losses')
                 self.wandb_run.log({
                     'losses' : {
-                        'test': {k : v for k,v in zip(self.meter.task_name,
+                        mode: {k : v for k,v in zip(self.meter.task_name,
                             self.meter.loss_item)}
                     },
                     'metrics' : {
-                        'test': {
+                        mode: {
                             task : {
                                 metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
                             } for task in self.meter.task_name
