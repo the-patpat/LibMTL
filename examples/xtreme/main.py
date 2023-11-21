@@ -99,11 +99,18 @@ def main(params):
                       multi_input=params.multi_input,
                       optim_param=optim_param,
                       scheduler_param=scheduler_param,
+                      save_path=params.save_path,
+                      load_path=params.load_path,
                       **kwargs)
-    SCModel.train(train_dataloaders=train_dataloaders, 
-                  val_dataloaders=val_dataloaders,
-                  test_dataloaders=test_dataloaders, 
-                  epochs=params.epochs)
+    if params.mode == 'train':
+        SCModel.train(train_dataloaders=train_dataloaders, 
+                      val_dataloaders=val_dataloaders,
+                      test_dataloaders=test_dataloaders, 
+                      epochs=params.epochs)
+    elif params.mode == 'test':
+        SCModel.test(test_dataloaders)
+    else:
+        raise ValueError
     
 if __name__ == "__main__":
     params = parse_args(LibMTL_args)
