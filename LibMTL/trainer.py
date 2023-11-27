@@ -5,6 +5,8 @@ import numpy as np
 
 from LibMTL._record import _PerformanceMeter
 from LibMTL.utils import count_parameters
+from tqdm import tqdm
+import wandb
 
 def get_cosine_similarities(grads):
     """Calculates cosine similarities between gradients
@@ -110,6 +112,11 @@ class Trainer(nn.Module):
         self._prepare_optimizer(optim_param, scheduler_param)
         
         self.meter = _PerformanceMeter(self.task_dict, self.multi_input)
+
+        if self.wandb_run is not None:
+            wandb.define_metric('epoch')
+            wandb.define_metric('losses*', step_metric='epoch')
+            wandb.define_metric('metrics*', step_metric='epoch')
         
     def _prepare_model(self, weighting, architecture, encoder_class, decoders):
         
@@ -229,7 +236,7 @@ class Trainer(nn.Module):
             self.model.epoch = epoch
             self.model.train()
             self.meter.record_time('begin')
-            for batch_index in range(train_batch):
+            for batch_index in tqdm(range(train_batch), total=train_batch):
                 if not self.multi_input:
                     train_inputs, train_gts = self._process_data(train_loader)
                     train_preds = self.model(train_inputs)
@@ -272,13 +279,15 @@ class Trainer(nn.Module):
                                 metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
                             } for task in self.meter.task_name
                         }
-                    }
+                    }, 
+                    'epoch' : epoch
                 })
             self.meter.reinit()
             if val_dataloaders is not None:
                 self.meter.has_val = True
                 val_improvement = self.test(val_dataloaders, epoch, mode='val', return_improvement=True)
-            self.test(test_dataloaders, epoch, mode='test')
+            else:
+                self.test(test_dataloaders, epoch, mode='test')
             if self.scheduler is not None:
                 if self.scheduler_param['scheduler'] == 'reduce' and val_dataloaders is not None:
                     self.scheduler.step(val_improvement)
@@ -290,7 +299,9 @@ class Trainer(nn.Module):
         self.meter.display_best_result()
         if return_weight:
             return self.batch_weight
-        np.savez('gradients.npz', gradient_storage)
+        if self.wandb_run is not None:
+            np.savez(f'gradients_{self.wandb_run.id}.npz', gradient_storage)
+
 
 
     def test(self, test_dataloaders, epoch=None, mode='test', return_improvement=False):
@@ -328,7 +339,6 @@ class Trainer(nn.Module):
         self.meter.display(epoch=epoch, mode=mode)
 
         if self.wandb_run is not None:
-                print('logging metrics and losses')
                 self.wandb_run.log({
                     'losses' : {
                         mode: {k : v for k,v in zip(self.meter.task_name,
@@ -340,7 +350,8 @@ class Trainer(nn.Module):
                                 metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
                             } for task in self.meter.task_name
                         }
-                    }
+                    }, 
+                    'epoch' : epoch
                 })
         improvement = self.meter.improvement
         self.meter.reinit()
