@@ -6,6 +6,7 @@ from torchvision import transforms
 from dataset import MultiMNIST
 
 from LibMTL import Trainer
+from LibMTL.model import resnet
 from LibMTL.metrics import AccMetric
 from LibMTL.loss import CELoss
 from LibMTL.utils import set_random_seed, set_device
@@ -16,6 +17,7 @@ import wandb
 import multi_lenet
 import numpy as np
 import random
+import re
 
 def parse_args(parser):
     parser.add_argument('--aug', action='store_true', default=False, help='data augmentation')
@@ -24,6 +26,8 @@ def parse_args(parser):
     parser.add_argument('--epochs', default=200, type=int, help='training epochs')
     parser.add_argument('--dropout', action='store_true', help='use dropout for multilenet')
     parser.add_argument('--dataset_path', default='/', type=str, help='dataset path')
+    parser.add_argument('--backbone', type=str, help='backbone to use', default='multilenet')
+    parser.add_argument('--debug', action='store_true', help='debug, do not use wandb')
     return parser.parse_args()
 
 def seed_worker(worker_id):
@@ -36,12 +40,26 @@ def main(params):
 
     run = wandb.init('libmtl_gradient_trajectory')
     kwargs, optim_param, scheduler_param = prepare_args(params)
+    wandb.config.update(
+        {
+            'cli' : params.__dict__,
+            'opt' : optim_param,
+            'scheduler' : scheduler_param,
+            'dataset' : 'multimnist'
+        }
+    )
 
     # Instantiate dataloaders
     g = torch.Generator()
     g.manual_seed(params.seed)
-    t = transforms.Compose([transforms.ToTensor(),
-                               transforms.Normalize((0.1307,), (0.3081,))])
+    trf = [transforms.ToTensor(),
+           transforms.Normalize((0.1307,), (0.3081,))]
+    if params.backbone == 'resnet':
+        # Resnet takes 3-channel tensors as input
+        trf.insert(1,transforms.Lambda(lambda x: x.repeat(3, 1, 1)))
+        trf.insert(2,transforms.Resize((224,224)))
+    t = transforms.Compose(trf)
+
     trainloader = torch.utils.data.DataLoader(
         MultiMNIST(root=params.dataset_path, split='train', 
                              transform=t),
@@ -70,8 +88,6 @@ def main(params):
         generator=g
     )
     
-    batch = next(iter(testloader))
-    
     # define tasks 
     task_dict = {
         'L' : {'metrics': ['classAcc'], 
@@ -87,10 +103,19 @@ def main(params):
     }
     
     # Define encoder and decoders
-    encoder_class = lambda : multi_lenet.MultiLeNetBackbone(params.dropout).to(f'cuda:{params.gpu_id}')
-    decoders = {task : multi_lenet.MultiLeNetHead(params.dropout).to(f'cuda:{params.gpu_id}')
+    if params.backbone == 'multilenet':
+        encoder_class = lambda : multi_lenet.MultiLeNetBackbone(params.dropout).to(f'cuda:{params.gpu_id}')
+        decoders = {task : multi_lenet.MultiLeNetHead(params.dropout).to(f'cuda:{params.gpu_id}')
+                for task in task_dict.keys()}
+    elif params.backbone=='resnet':
+        encoder_class = lambda : resnet.resnet18().to(f'cuda:{params.gpu_id}')
+        decoders = {task : nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),
+                                        nn.Flatten(1),
+                                        nn.Linear(512, 50),
+                            multi_lenet.MultiLeNetHead(params.dropout)).to(f'cuda:{params.gpu_id}')
                 for task in task_dict.keys()}
 
+    # Define custom trainer. Does not change much. Can change e.g. when predictions etc need to be processed.
     class MultiMNISTTrainer(Trainer):
         def __init__(self, task_dict, weighting, architecture, encoder_class, 
                      decoders, rep_grad, multi_input, optim_param,
@@ -106,6 +131,8 @@ def main(params):
                                             scheduler_param=scheduler_param,
                                             wandb_run=wandb_run,
                                             **kwargs)
+    
+    # Instantiate trainer
     MNISTModel = MultiMNISTTrainer(task_dict=task_dict, 
                           weighting=params.weighting, 
                           architecture=params.arch, 
@@ -119,8 +146,11 @@ def main(params):
                           save_path=params.save_path,
                           load_path=params.load_path,
                           **kwargs)
+    
+    
     if params.mode == 'train':
-        MNISTModel.train(trainloader, valloader, params.epochs)
+        MNISTModel.train(trainloader, None, params.epochs,
+                         val_dataloaders=valloader)
     elif params.mode == 'test':
         MNISTModel.test(testloader)
     else:
