@@ -161,6 +161,11 @@ cython_debug/
 #
 #Numpy
 *.npy
+*.npz
 
 #Wandb
 wandb/
+
+#HPC logs
+*.err
+*.out
