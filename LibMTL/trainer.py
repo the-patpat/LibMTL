@@ -8,17 +8,23 @@ from LibMTL.utils import count_parameters
 from tqdm import tqdm
 import wandb
 
-def get_cosine_similarities(grads):
+def get_cosine_similarities(grads, common=None):
     """Calculates cosine similarities between gradients
     Calculates the cosine similarities between gradient vectors, packed in
     a numpy nd array. All of the gradients have the same amount of elements.
 
     Args:
         grads (numpy.ndarray): ndarray of shape (n_grads, n_elements)
+        mean (numpy.ndarray) [optional]: ndarray of shape (n_elements,)
 
     Returns:
-        numpy.ndarray: ndarray of shape(n_grads, n_grads) symmetric matrix of cosine similarities
+        numpy.ndarray: ndarray of shape(n_grads+1, n_grads+1) symmetric matrix of cosine similarities, plus
+        cosine similarity of per-task shared gradiens and the mean gradient
     """
+    if common is None:
+        grads = np.concatenate((grads.mean(axis=0).reshape(1, -1), grads), axis=0)
+    else:
+        grads = np.concatenate((common.reshape(1,-1), grads), axis=0)
     gg = grads @ grads.T
     length = np.sqrt(np.diag(gg)).reshape(-1,1)
     cos_sim = gg / (length @ length.T)
@@ -230,13 +236,17 @@ class Trainer(nn.Module):
         self.model.train_loss_buffer = np.zeros([self.task_num, epochs])
         self.model.epochs = epochs
         self.model._compute_grad_dim() 
-        gradient_storage = np.zeros((epochs,
-                              train_batch, self.task_num, self.task_num))
+        # First dimension: pre-post if available, start with 1 and expand it in
+        # the actual optimization code
+        # Last two?: +1 for common gradient
+        self.model.gradient_storage = np.zeros((1, epochs,
+                              train_batch, self.task_num+1, self.task_num+1))
         for epoch in range(epochs):
             self.model.epoch = epoch
             self.model.train()
             self.meter.record_time('begin')
             for batch_index in tqdm(range(train_batch), total=train_batch):
+                self.model.batch_index = batch_index
                 if not self.multi_input:
                     train_inputs, train_gts = self._process_data(train_loader)
                     train_preds = self.model(train_inputs)
@@ -254,9 +264,9 @@ class Trainer(nn.Module):
                         self.meter.update(train_pred, train_gt, task)
                 self.optimizer.zero_grad()
                 grads = self.model._get_grads(train_losses, 'autograd')
-                grads = grads.detach().cpu().numpy()
-                csim = get_cosine_similarities(grads)
-                gradient_storage[epoch, batch_index] = csim.copy()
+                self.model.grads = grads.detach().cpu().numpy()
+                csim = get_cosine_similarities(self.model.grads.copy())
+                self.model.gradient_storage[0, epoch, batch_index] = csim.copy()
                 w = self.model.backward(train_losses, **self.kwargs['weight_args'])
                 if w is not None:
                     self.batch_weight[:, epoch, batch_index] = w
@@ -300,7 +310,7 @@ class Trainer(nn.Module):
         if return_weight:
             return self.batch_weight
         if self.wandb_run is not None:
-            np.savez(f'gradients_{self.wandb_run.id}.npz', gradient_storage)
+            np.savez(f'gradients_{self.wandb_run.id}.npz', self.model.gradient_storage)
 
 
 

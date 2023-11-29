@@ -2,6 +2,7 @@ import torch, sys, random
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from LibMTL.trainer import get_cosine_similarities
 
 
 class AbsWeighting(nn.Module):
@@ -60,6 +61,12 @@ class AbsWeighting(nn.Module):
         return grads
 
     def _reset_grad(self, new_grads):
+        if self.gradient_storage.shape[0] < 2:
+            self.gradient_storage = np.concatenate((self.gradient_storage,
+                                                    np.zeros_like(self.gradient_storage)),
+                                                    axis=0)
+        csim = get_cosine_similarities(self.grads, new_grads.cpu().detach().numpy().copy()) 
+        self.gradient_storage[1, self.epoch, self.batch_index] = csim.copy()
         count = 0
         for param in self.get_share_params():
             if param.grad is not None:
