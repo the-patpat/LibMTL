@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from LibMTL.weighting.abstract_scheduled_weighting import AbsScheduledWeighting
 from LibMTL.weighting.abstract_weighting import AbsWeighting
 
 from scipy.optimize import minimize
@@ -62,3 +63,10 @@ class CAGrad(AbsWeighting):
             raise ValueError('No support rescale type {}'.format(rescale))
         self._reset_grad(new_grads)
         return w_cpu
+
+class DelayedCAGrad(AbsScheduledWeighting, CAGrad):
+    def __init__(self):
+        super(DelayedCAGrad, self).__init__()
+
+    def _backward(self, losses, **kwargs):
+        return CAGrad.backward(self, losses, **kwargs)

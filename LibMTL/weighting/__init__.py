@@ -6,10 +6,10 @@ from LibMTL.weighting.UW import UW
 from LibMTL.weighting.DWA import DWA
 from LibMTL.weighting.GLS import GLS
 from LibMTL.weighting.GradDrop import GradDrop
-from LibMTL.weighting.PCGrad import PCGrad
+from LibMTL.weighting.PCGrad import PCGrad, DelayedPCGrad
 from LibMTL.weighting.GradVac import GradVac
 from LibMTL.weighting.IMTL import IMTL
-from LibMTL.weighting.CAGrad import CAGrad
+from LibMTL.weighting.CAGrad import CAGrad, DelayedCAGrad
 from LibMTL.weighting.Nash_MTL import Nash_MTL
 from LibMTL.weighting.RLW import RLW
 from LibMTL.weighting.MoCo import MoCo
@@ -24,9 +24,11 @@ __all__ = ['AbsWeighting',
            'GLS',
            'GradDrop',
            'PCGrad',
+           'DelayedPCGrad'
            'GradVac',
            'IMTL',
            'CAGrad',
+           'DelayedCAGrad',
            'Nash_MTL',
            'RLW',
            'MoCo',

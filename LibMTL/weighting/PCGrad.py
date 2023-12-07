@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from LibMTL.weighting.abstract_weighting import AbsWeighting
+from LibMTL.weighting.abstract_scheduled_weighting import AbsScheduledWeighting
 
 class PCGrad(AbsWeighting):
     r"""Project Conflicting Gradients (PCGrad).
@@ -37,3 +38,10 @@ class PCGrad(AbsWeighting):
         new_grads = pc_grads.sum(0)
         self._reset_grad(new_grads)
         return batch_weight
+
+class DelayedPCGrad(AbsScheduledWeighting, PCGrad):
+    def __init__(self):
+        super(DelayedPCGrad, self).__init__()
+    def _backward(self, losses, **kwargs):
+        return PCGrad.backward(self, losses, **kwargs)
+
