@@ -36,9 +36,9 @@ class MultiLeNetBackbone(nn.Module):
 
 
 class MultiLeNetHead(nn.Module):
-    def __init__(self, no_dropout=False):
+    def __init__(self, no_dropout=False, n_classes=10):
         super(MultiLeNetHead, self).__init__()
-        self._fc1, self._fc2 = nn.Linear(50, 50), nn.Linear(50, 10)
+        self._fc1, self._fc2 = nn.Linear(50, 50), nn.Linear(50, n_classes)
         self.no_dropout = no_dropout
 
     def forward(self, x, mask=None):
