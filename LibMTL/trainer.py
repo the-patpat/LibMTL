@@ -22,13 +22,13 @@ def get_cosine_similarities(grads, common=None):
         cosine similarity of per-task shared gradiens and the mean gradient
     """
     if common is None:
-        grads = np.concatenate((grads.mean(axis=0).reshape(1, -1), grads), axis=0)
+        g = np.concatenate((grads.mean(axis=0).reshape(1, -1), grads), axis=0)
     else:
-        grads = np.concatenate((common.reshape(1,-1), grads), axis=0)
-    gg = grads @ grads.T
+        g = np.concatenate((common.reshape(1,-1), grads), axis=0)
+    gg = g @ g.T
     length = np.sqrt(np.diag(gg)).reshape(-1,1)
     cos_sim = gg / (length @ length.T)
-    return cos_sim
+    return cos_sim, length
 
 class Trainer(nn.Module):
     r'''A Multi-Task Learning Trainer.
@@ -241,6 +241,7 @@ class Trainer(nn.Module):
         # Last two?: +1 for common gradient
         self.model.gradient_storage = np.zeros((1, epochs,
                               train_batch, self.task_num+1, self.task_num+1))
+        self.model.gradient_mag_storage = np.zeros((1, epochs, train_batch, self.task_num+1))
         for epoch in range(epochs):
             self.model.epoch = epoch
             self.model.train()
@@ -265,13 +266,22 @@ class Trainer(nn.Module):
                 self.optimizer.zero_grad()
                 grads = self.model._get_grads(train_losses, 'autograd')
                 self.model.grads = grads.detach().cpu().numpy()
-                csim = get_cosine_similarities(self.model.grads.copy())
+                csim, length = get_cosine_similarities(self.model.grads.copy())
                 self.model.gradient_storage[0, epoch, batch_index] = csim.copy()
+                self.model.gradient_mag_storage[0, epoch, batch_index] = length.flatten().copy() 
                 w = self.model.backward(train_losses, **self.kwargs['weight_args'])
                 if w is not None:
                     self.batch_weight[:, epoch, batch_index] = w
+
+                old_params = torch.cat([g.view(-1) for g in list(self.model.get_share_params())])
                 self.optimizer.step()
-            
+                new_params = torch.cat([g.view(-1) for g in list(self.model.get_share_params())])
+
+                with torch.no_grad():
+                    step = (new_params - old_params)
+                    # print(f"Step length: {(step@step.T).sqrt()}, min: {step.min()}, max: {step.max()}")
+                    
+
             self.meter.record_time('end')
             self.meter.get_score()
             self.model.train_loss_buffer[:, epoch] = self.meter.loss_item
@@ -304,14 +314,15 @@ class Trainer(nn.Module):
                 else:
                     self.scheduler.step()
             if self.save_path is not None and self.meter.best_result['epoch'] == epoch:
-                torch.save(self.model.state_dict(), os.path.join(self.save_path, 'best.pt'))
-                print('Save Model {} to {}'.format(epoch, os.path.join(self.save_path, 'best.pt')))
+                if self.wandb_run is not None:
+                    torch.save(self.model.state_dict(), os.path.join(self.save_path, f'best_{self.wandb_run.id}.pt'))
+                    print('Save Model {} to {}'.format(epoch, os.path.join(self.save_path, f'best_{self.wandb_run.id}.pt')))
+            if self.wandb_run is not None:
+                np.savez(f'gradients_{self.wandb_run.id}.npz', csim=self.model.gradient_storage, mag=self.model.gradient_mag_storage)
         self.meter.display_best_result()
         if return_weight:
             return self.batch_weight
-        if self.wandb_run is not None:
-            np.savez(f'gradients_{self.wandb_run.id}.npz', self.model.gradient_storage)
-
+        
 
 
     def test(self, test_dataloaders, epoch=None, mode='test', return_improvement=False):

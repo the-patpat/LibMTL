@@ -10,7 +10,7 @@ class AbsScheduledWeighting(AbsWeighting):
         pass
     
     def backward(self, losses, **kwargs):
-        if self.epoch < 10:
+        if self.epoch > 10:
             # Do EW in the beginning
             loss = torch.mul(losses, torch.ones_like(losses).to(self.device)).sum()
             loss.backward()

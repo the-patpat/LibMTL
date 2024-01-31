@@ -65,8 +65,13 @@ class AbsWeighting(nn.Module):
             self.gradient_storage = np.concatenate((self.gradient_storage,
                                                     np.zeros_like(self.gradient_storage)),
                                                     axis=0)
-        csim = get_cosine_similarities(self.grads, new_grads.cpu().detach().numpy().copy()) 
+        if self.gradient_mag_storage.shape[0] < 2:
+            self.gradient_mag_storage = np.concatenate((self.gradient_mag_storage,
+                                                    np.zeros_like(self.gradient_mag_storage)),
+                                                    axis=0)
+        csim, length = get_cosine_similarities(self.grads, new_grads.cpu().detach().numpy().copy()) 
         self.gradient_storage[1, self.epoch, self.batch_index] = csim.copy()
+        self.gradient_mag_storage[1, self.epoch, self.batch_index] = length.flatten().copy()
         count = 0
         for param in self.get_share_params():
             if param.grad is not None:
