@@ -108,7 +108,7 @@ def main(params):
         decoders = {task : multi_lenet.MultiLeNetHead(params.dropout).to(f'cuda:{params.gpu_id}')
                 for task in task_dict.keys()}
     elif params.backbone=='resnet':
-        encoder_class = lambda : resnet.resnet18().to(f'cuda:{params.gpu_id}')
+        encoder_class = lambda : resnet.resnet18(pretrained=True).to(f'cuda:{params.gpu_id}')
         decoders = {task : nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),
                                         nn.Flatten(1),
                                         nn.Linear(512, 50),
