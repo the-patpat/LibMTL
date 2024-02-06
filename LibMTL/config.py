@@ -80,7 +80,7 @@ def prepare_args(params):
     kwargs = {'weight_args': {}, 'arch_args': {}}
     if params.weighting in ['EW', 'UW', 'GradNorm', 'GLS', 'RLW', 'MGDA', 'IMTL',
                             'PCGrad', 'GradVac', 'CAGrad','DelayedCAGrad','GradDrop', 'DWA', 
-                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DelayedPCGrad']:
+                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DelayedPCGrad', 'ConfMax']:
         if params.weighting in ['DWA']:
             if params.T is not None:
                 kwargs['weight_args']['T'] = params.T

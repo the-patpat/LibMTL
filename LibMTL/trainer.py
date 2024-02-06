@@ -264,7 +264,7 @@ class Trainer(nn.Module):
                         train_losses[tn] = self._compute_loss(train_pred, train_gt, task)
                         self.meter.update(train_pred, train_gt, task)
                 self.optimizer.zero_grad()
-                grads = self.model._get_grads(train_losses, 'autograd')
+                grads, _ = self.model._get_grads(train_losses, 'autograd')
                 self.model.grads = grads.detach().cpu().numpy()
                 csim, length = get_cosine_similarities(self.model.grads.copy())
                 self.model.gradient_storage[0, epoch, batch_index] = csim.copy()

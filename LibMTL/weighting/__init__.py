@@ -14,6 +14,7 @@ from LibMTL.weighting.Nash_MTL import Nash_MTL
 from LibMTL.weighting.RLW import RLW
 from LibMTL.weighting.MoCo import MoCo
 from LibMTL.weighting.Aligned_MTL import Aligned_MTL
+from LibMTL.weighting.ConfMax import ConfMax
 
 __all__ = ['AbsWeighting',
            'EW', 
@@ -32,4 +33,5 @@ __all__ = ['AbsWeighting',
            'Nash_MTL',
            'RLW',
            'MoCo',
-           'Aligned_MTL']
+           'Aligned_MTL', 
+           'ConfMax']
