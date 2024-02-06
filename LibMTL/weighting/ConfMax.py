@@ -81,67 +81,16 @@ class ConfMax(AbsWeighting):
         tn_mod = np.random.choice(range(self.task_num))
         tn_stat = 1 - tn_mod
 
-        np_grads = grads.cpu().numpy()
+        if torch.dot(grads[tn_mod], grads[tn_stat]) > 0:
+            np_grads = grads.cpu().numpy()
 
-        x, exitflag = self.eng.solve_socp(np_grads[tn_mod].reshape(-1,1).astype(float),
-                                          np_grads[tn_stat].reshape(-1,1).astype(float),
-                                          self.grad_dim, nargout=2)
-        if int(exitflag) == 1:
-            new_grads = [grads[tn_stat]]
-            new_grads.insert(tn_mod, 
-                             torch.tensor(np.asarray(x).copy()).reshape(-1,).to(device=grads.device))
-            self._backward_new_grads(torch.ones(self.task_num),
-                                     grads=torch.stack(new_grads))
-
-        # sol = minimize(
-        #     lambda x: np.dot(np_grads[tn_stat],x),
-        #     np.zeros_like(np_grads[tn_stat]),
-        #     constraints=[
-        #         LinearConstraint(np.vstack((-np_grads[tn_stat], np_grads[tn_mod])), ub=np.asarray([0,0])),
-        #         NonlinearConstraint(np.linalg.norm, lb=-np.inf, ub=np.linalg.norm(np_grads[tn_stat]))
-        #     ], 
-        #     # method='trust-constr' 
-        # )
-        # if sol.x is not None:
-        #     new_grads = [grads[tn_stat]]
-        #     new_grads.insert(tn_mod,
-        #                      torch.Tensor(sol.x).to(device=grads.device))
-        #     self._backward_new_grads(torch.ones(self.task_num),
-        #                              grads=torch.cat(new_grads))
-        # # Formulate problem
-        # c = matrix(np.asarray(grads[tn_stat].cpu(), dtype=float))
-        # G = matrix([
-        #     matrix(np.asarray(-grads[tn_mod].cpu(), dtype=float)).T,
-        #     matrix(np.asarray(grads[tn_stat].cpu(), dtype=float)).T,
-        #     matrix(np.zeros(self.grad_dim, dtype=float)).T,
-        #     spmatrix(1.0, range(self.grad_dim), range(self.grad_dim))
-        # ])
-        # h = matrix([matrix([0.0, 0.0, float(grads[tn_mod].cpu().norm())]),
-        #             matrix(np.zeros(self.grad_dim, dtype=float))])
-        # dims = {'l' : 2, 'q' : [self.grad_dim+1], 's' : []}
-        # sol = solvers.conelp(c, G, h, dims)
-
-        # if sol['x'] is not None:
-        #     new_grads = [grads[tn_stat]]
-        #     new_grads.insert(tn_mod, 
-        #                      torch.Tensor(np.asarray(sol['x']).T).to(grads.device))
-        #     self._backward_new_grads(torch.ones(self.task_num), 
-        #                              grads=torch.cat(new_grads))
-        else:
-            loss = torch.mul(losses, torch.ones_like(losses).to(self.device)).sum()
-            loss.backward()
-
-        del x, exitflag
-
-
-        # for tn_i in range(self.task_num):
-        #     task_index = list(range(self.task_num))
-        #     random.shuffle(task_index)
-        #     for tn_j in task_index:
-        #         g_ij = torch.dot(pc_grads[tn_i], grads[tn_j])
-        #         if g_ij < 0:
-        #             pc_grads[tn_i] -= g_ij * grads[tn_j] / (grads[tn_j].norm().pow(2)+1e-8)
-        #             batch_weight[tn_j] -= (g_ij/(grads[tn_j].norm().pow(2)+1e-8)).item()
-        # new_grads = pc_grads.sum(0)
-        # self._reset_grad(new_grads)
+            x, exitflag = self.eng.solve_socp(np_grads[tn_mod].reshape(-1,1).astype(float),
+                                            np_grads[tn_stat].reshape(-1,1).astype(float),
+                                            self.grad_dim, nargout=2)
+            if int(exitflag) == 1:
+                new_grads = [grads[tn_stat]]
+                new_grads.insert(tn_mod, 
+                                torch.tensor(np.asarray(x).copy()).reshape(-1,).to(device=grads.device))
+                self._backward_new_grads(torch.ones(self.task_num),
+                                        grads=torch.stack(new_grads))
         return torch.ones(self.task_num) 
