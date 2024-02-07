@@ -15,7 +15,7 @@ class ConfMax(AbsWeighting):
         super(ConfMax, self).__init__()
         self.eng = matlab.engine.start_matlab()
         self.eng.cd('/home/pasch/repos/LibMTL')
-
+    
     def _grad2vec(self):
         grad = torch.zeros(self.grad_dim)
         inds = []
@@ -91,6 +91,5 @@ class ConfMax(AbsWeighting):
                 new_grads = [grads[tn_stat]]
                 new_grads.insert(tn_mod, 
                                 torch.tensor(np.asarray(x).copy()).reshape(-1,).to(device=grads.device))
-                self._backward_new_grads(torch.ones(self.task_num),
-                                        grads=torch.stack(new_grads))
+                self._reset_grad(torch.stack(new_grads))
         return torch.ones(self.task_num) 
