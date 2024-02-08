@@ -2,8 +2,6 @@ import torch, random
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from cvxopt import matrix, spmatrix, sparse, solvers
-from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
 import io 
 
 from LibMTL.weighting.abstract_weighting import AbsWeighting
