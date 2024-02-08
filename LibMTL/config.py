@@ -59,7 +59,9 @@ _parser.add_argument('--MoCo_beta_sigma', type=float, default=0.5, help='MoCo_be
 _parser.add_argument('--MoCo_gamma', type=float, default=0.1, help='gamma for MoCo')
 _parser.add_argument('--MoCo_gamma_sigma', type=float, default=0.5, help='MoCo_gamma_sigma for MoCo')
 _parser.add_argument('--MoCo_rho', type=float, default=0, help='MoCo_rho for MoCo')
-
+## ConfMax
+_parser.add_argument('--ConfMax_retain', type=float, default=0.0,
+                     help='Portion of angle between two gradients to retain')
 # args for architecture
 ## CGC
 _parser.add_argument('--img_size', nargs='+', help='image size for CGC')
@@ -80,7 +82,7 @@ def prepare_args(params):
     kwargs = {'weight_args': {}, 'arch_args': {}}
     if params.weighting in ['EW', 'UW', 'GradNorm', 'GLS', 'RLW', 'MGDA', 'IMTL',
                             'PCGrad', 'GradVac', 'CAGrad','DelayedCAGrad','GradDrop', 'DWA', 
-                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DelayedPCGrad', 'ConfMax']:
+                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DelayedPCGrad','ConfMax']:
         if params.weighting in ['DWA']:
             if params.T is not None:
                 kwargs['weight_args']['T'] = params.T
@@ -129,6 +131,8 @@ def prepare_args(params):
             kwargs['weight_args']['MoCo_gamma'] = params.MoCo_gamma
             kwargs['weight_args']['MoCo_gamma_sigma'] = params.MoCo_gamma_sigma
             kwargs['weight_args']['MoCo_rho'] = params.MoCo_rho
+        elif params.weighting in ['ConfMax']:
+            kwargs['weight_args']['ConfMax_retain'] = params.ConfMax_retain
     else:
         raise ValueError('No support weighting method {}'.format(params.weighting)) 
         

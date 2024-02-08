@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from cvxopt import matrix, spmatrix, sparse, solvers
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
+import io 
 
 from LibMTL.weighting.abstract_weighting import AbsWeighting
 
@@ -86,10 +87,10 @@ class ConfMax(AbsWeighting):
 
             x, exitflag = self.eng.solve_socp(np_grads[tn_mod].reshape(-1,1).astype(float),
                                             np_grads[tn_stat].reshape(-1,1).astype(float),
-                                            self.grad_dim, nargout=2)
+                                            self.grad_dim, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
             if int(exitflag) == 1:
                 new_grads = [grads[tn_stat]]
                 new_grads.insert(tn_mod, 
-                                torch.tensor(np.asarray(x).copy()).reshape(-1,).to(device=grads.device))
+                                torch.tensor(np.asarray(x).copy().astype(np.float32)).reshape(-1,).to(device=grads.device))
                 self._reset_grad(torch.stack(new_grads))
         return torch.ones(self.task_num) 
