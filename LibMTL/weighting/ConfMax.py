@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import io 
-
+import os
+from joblib import Parallel, delayed
 from LibMTL.weighting.abstract_weighting import AbsWeighting
 
 import matlab.engine
@@ -64,15 +65,77 @@ class ConfMax(AbsWeighting):
         tn_mod = np.random.choice(range(self.task_num))
         tn_stat = 1 - tn_mod
 
-        if torch.dot(grads[tn_mod], grads[tn_stat]) > 0:
-            np_grads = grads.cpu().numpy()
+        np_grads = grads.cpu().numpy()
+        if self.grad_dim < 30000:
+            if torch.dot(grads[tn_mod], grads[tn_stat]) > 0:
 
-            x, exitflag = self.eng.solve_socp(np_grads[tn_mod].reshape(-1,1).astype(float),
-                                            np_grads[tn_stat].reshape(-1,1).astype(float),
-                                            self.grad_dim, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                x, exitflag = self.eng.solve_socp(np_grads[tn_mod].reshape(-1,1).astype(float),
+                                                np_grads[tn_stat].reshape(-1,1).astype(float),
+                                                self.grad_dim, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                if int(exitflag) == 1:
+                    new_grads = [grads[tn_stat]]
+                    new_grads.insert(tn_mod, 
+                                    torch.tensor(np.asarray(x).copy().astype(np.float32)).reshape(-1,).to(device=grads.device))
+                    self._reset_grad(torch.stack(new_grads))
+        else:
+            # Per module gradient, for conv modules per channel gradients
+            new_grad = np.zeros_like(np_grads[tn_mod])
+            beg = 0
+            for (name, param), s in zip(self.encoder.named_parameters(),
+                                         self.grad_index):
+                # print(f'ConfMax {name}, size: {param.size()}')
+                if torch.dot(grads[tn_mod, beg:beg+s], grads[tn_stat, beg:beg+s]) > 0:
+                    # If the module parameter length is under 30000, just do it as one problem
+                    if s < 30000:
+                        x, exitflag = self.eng.solve_socp(np_grads[tn_mod, beg:beg+s].reshape(-1,1).astype(float),
+                                                        np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float),
+                                                        s, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                        if int(exitflag) == 1:
+                            new_grad[beg:beg+s] = np.asarray(x).reshape(-1,)
+                        else:
+                            new_grad[beg:beg+s] = np_grads[tn_mod, beg:beg+s]
+                    else:
+                        # Split it up across channel (or, first dimension)
+                        n_channels = param.size()[0]
+                        part_size = np.prod(param.size()[1:]).astype(int)
+                        assert part_size < 30000
+                        x, exitflag = self.eng.solve_socp_parallel(np_grads[tn_mod, beg:beg+s].reshape(-1,1).astype(float),
+                                                        np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float),
+                                                        n_channels, part_size, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                        if np.asarray(exitflag).all():
+                            new_grad[beg:beg+s] = np.asarray(x).copy().reshape(-1,)
+                        else:
+                            new_grad[beg:beg+s] = np_grads[tn_mod, beg:beg+s]
+                            # for i in range(n_channels):
+                            
+                            # print(f"{i}, part size {part_size}")
+                            # if torch.dot(grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size],
+                            #              grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size]) > 0:
+                            #     x, exitflag = self.eng.solve_socp(np_grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size].reshape(-1,1).astype(float),
+                            #                                     np_grads[tn_stat, beg+i*part_size:beg+(i+1)*part_size].reshape(-1,1).astype(float),
+                            #                                     part_size, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                            #     if int(exitflag) == 1:
+                            #         new_grad[beg+i*part_size:beg+(i+1)*part_size] = np.asarray(x).reshape(-1,)
+                            #     else:
+                            #         new_grad[beg+i*part_size:beg+(i+1)*part_size] = np_grads[tn_mod,beg+i*part_size:beg+(i+1)*part_size]
+                            # else:
+                            #     new_grad[beg+i*part_size:beg+(i+1)*part_size] = np_grads[tn_mod,beg+i*part_size:beg+(i+1)*part_size]
+                beg += s
+            new_grads = [grads[tn_stat]]
+            new_grads.insert(tn_mod, 
+                             torch.tensor(new_grad.copy().astype(np.float32)).reshape(-1,).to(device=grads.device))
+            self._reset_grad(torch.stack(new_grads))
+        return torch.ones(self.task_num)
+    
+    def __channelwise_opt(self, np_grads, new_grad, part_size, i, tn_mod, tn_stat, kwargs, beg):
+        if np.dot(np_grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size],
+                                        np_grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size]) > 0:
+            x, exitflag = self.eng[i%4].solve_socp(np_grads[tn_mod, beg+i*part_size:beg+(i+1)*part_size].reshape(-1,1).astype(float),
+                                                            np_grads[tn_stat, beg+i*part_size:beg+(i+1)*part_size].reshape(-1,1).astype(float),
+                                                            part_size, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
             if int(exitflag) == 1:
-                new_grads = [grads[tn_stat]]
-                new_grads.insert(tn_mod, 
-                                torch.tensor(np.asarray(x).copy().astype(np.float32)).reshape(-1,).to(device=grads.device))
-                self._reset_grad(torch.stack(new_grads))
-        return torch.ones(self.task_num) 
+                new_grad[beg+i*part_size:beg+(i+1)*part_size] = np.asarray(x).reshape(-1,)
+            else:
+                new_grad[beg+i*part_size:beg+(i+1)*part_size] = np_grads[tn_mod,beg+i*part_size:beg+(i+1)*part_size]
+        else:
+            new_grad[beg+i*part_size:beg+(i+1)*part_size] = np_grads[tn_mod,beg+i*part_size:beg+(i+1)*part_size]
