@@ -15,42 +15,26 @@ class ConfMax(AbsWeighting):
         self.eng = matlab.engine.start_matlab()
         self.eng.cd('/home/pasch/repos/LibMTL')
     
-    def _grad2vec(self):
-        grad = torch.zeros(self.grad_dim)
-        inds = []
-        count = 0
-        for param in self.get_share_params():
-            if param.grad is not None:
-                beg = 0 if count == 0 else sum(self.grad_index[:count])
-                end = sum(self.grad_index[:(count+1)])
-                grad[beg:end] = param.grad.data.view(-1)
-                inds.append((beg, end))
-            count += 1
-        return grad, inds
-
     def _compute_grad(self, losses, mode, rep_grad=False):
         '''
         mode: backward, autograd
         '''
         if not rep_grad:
             grads = torch.zeros(self.task_num, self.grad_dim).to(self.device)
-            inds = []
             for tn in range(self.task_num):
                 if mode == 'backward':
                     losses[tn].backward(retain_graph=True) if (tn+1)!=self.task_num else losses[tn].backward()
-                    grads[tn], ind = self._grad2vec()
+                    grads[tn] = self._grad2vec()
                 elif mode == 'autograd':
                     grad = list(torch.autograd.grad(losses[tn], self.get_share_params(), retain_graph=True))
                     ind = []
                     beg = 0
                     for g in grad:
                         cnt = g.view(-1).size()[0]
-                        ind.append((beg, (beg+cnt-1)))
                         beg += cnt
                     grads[tn] = torch.cat([g.view(-1) for g in grad])
                 else:
                     raise ValueError('No support {} mode for gradient computation')
-                inds.append(ind)
                 self.zero_grad_share_params()
         else:
             if not isinstance(self.rep, dict):
@@ -61,7 +45,7 @@ class ConfMax(AbsWeighting):
                 if mode == 'backward':
                     losses[tn].backward(retain_graph=True) if (tn+1)!=self.task_num else losses[tn].backward()
                     grads[tn] = self.rep_tasks[task].grad.data.clone()
-        return grads, inds
+        return grads
         
     def backward(self, losses, **kwargs):
         batch_weight = np.ones(len(losses))
@@ -69,7 +53,7 @@ class ConfMax(AbsWeighting):
             raise ValueError('No support method PCGrad with representation gradients (rep_grad=True)')
         else:
             self._compute_grad_dim()
-            grads, inds = self._compute_grad(losses, mode='backward') # [task_num, grad_dim]
+            grads = self._compute_grad(losses, mode='backward') # [task_num, grad_dim]
         # pc_grads = grads.clone()
         
         # Limited to the case where self.task_num == 2
