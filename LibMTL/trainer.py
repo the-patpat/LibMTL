@@ -8,6 +8,7 @@ from LibMTL.utils import count_parameters
 from tqdm import tqdm
 import wandb
 
+
 def get_cosine_similarities(grads, common=None):
     """Calculates cosine similarities between gradients
     Calculates the cosine similarities between gradient vectors, packed in
@@ -264,7 +265,8 @@ class Trainer(nn.Module):
                         train_losses[tn] = self._compute_loss(train_pred, train_gt, task)
                         self.meter.update(train_pred, train_gt, task)
                 self.optimizer.zero_grad()
-                grads, _ = self.model._get_grads(train_losses, 'autograd')
+                # TODO: needs grads, _ when using with ConfMax, otherwise not
+                grads = self.model._get_grads(train_losses, 'autograd')
                 self.model.grads = grads.detach().cpu().numpy()
                 csim, length = get_cosine_similarities(self.model.grads.copy())
                 self.model.gradient_storage[0, epoch, batch_index] = csim.copy()

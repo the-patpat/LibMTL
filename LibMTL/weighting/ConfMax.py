@@ -91,7 +91,7 @@ class ConfMax(AbsWeighting):
                                                         np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float),
                                                         s, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
                         if int(exitflag) == 1:
-                            new_grad[beg:beg+s] = np.asarray(x).reshape(-1,)
+                            new_grad[beg:beg+s] = np.asarray(x).copy().reshape(-1,)
                         else:
                             new_grad[beg:beg+s] = np_grads[tn_mod, beg:beg+s]
                     else:
@@ -99,9 +99,15 @@ class ConfMax(AbsWeighting):
                         n_channels = param.size()[0]
                         part_size = np.prod(param.size()[1:]).astype(int)
                         assert part_size < 30000
-                        x, exitflag = self.eng.solve_socp_parallel(np_grads[tn_mod, beg:beg+s].reshape(-1,1).astype(float),
-                                                        np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float),
-                                                        n_channels, part_size, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
+                        out = io.StringIO()
+                        np.savetxt('/home/pasch/repos/LibMTL/np_grads_mod.txt', np_grads[tn_mod, beg:beg+s].reshape(-1,1).astype(float))
+                        np.savetxt('/home/pasch/repos/LibMTL/np_grads_stat.txt', np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float))
+                        self.eng.eval("grads_mod = readmatrix('np_grads_mod.txt')", nargout=0, stdout=out)
+                        self.eng.eval("grads_stat = readmatrix('np_grads_stat.txt')", nargout=0, stdout=out)
+                        x, exitflag = self.eng.eval(f'solve_socp_parallel(grads_mod, grads_stat, {n_channels}, {part_size}, {kwargs["ConfMax_retain"]})', nargout=2, stdout=out, stderr=out)
+                        # x, exitflag = self.eng.solve_socp_parallel(np_grads[tn_mod, beg:beg+s].reshape(-1,1).astype(float),
+                                                        # np_grads[tn_stat, beg:beg+s].reshape(-1,1).astype(float),
+                                                        # n_channels, part_size, kwargs['ConfMax_retain'], nargout=2, stdout=io.StringIO(), stderr=io.StringIO())
                         if np.asarray(exitflag).all():
                             new_grad[beg:beg+s] = np.asarray(x).copy().reshape(-1,)
                         else:

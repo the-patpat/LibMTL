@@ -64,17 +64,17 @@ def main(params):
                  'depth': {'metrics':['abs_err', 'rel_err'], 
                            'metrics_fn': DepthMetric(),
                            'loss_fn': DepthLoss(),
-                           'weight': [0, 0]},
-                 'normal': {'metrics':['mean', 'median', '<11.25', '<22.5', '<30'], 
-                            'metrics_fn': NormalMetric(),
-                            'loss_fn': NormalLoss(),
-                            'weight': [0, 0, 1, 1, 1]}}
+                           'weight': [0, 0]}}#,
+                #  'normal': {'metrics':['mean', 'median', '<11.25', '<22.5', '<30'], 
+                #             'metrics_fn': NormalMetric(),
+                #             'loss_fn': NormalLoss(),
+                #             'weight': [0, 0, 1, 1, 1]}}
     
     # define encoder and decoders
     def encoder_class(): 
-        return resnet_dilated('resnet50')
-    num_out_channels = {'segmentation': 13, 'depth': 1, 'normal': 3}
-    decoders = nn.ModuleDict({task: DeepLabHead(2048, 
+        return resnet_dilated('resnet18')
+    num_out_channels = {'segmentation': 13, 'depth': 1}#, 'normal': 3}
+    decoders = nn.ModuleDict({task: DeepLabHead(512, #2048, 
                                                 num_out_channels[task]) for task in list(task_dict.keys())})
     
     class NYUtrainer(Trainer):
@@ -91,6 +91,24 @@ def main(params):
                                             scheduler_param=scheduler_param,
                                             wandb_run=wandb_run,
                                             **kwargs)
+            self.data_hist = []
+
+        def _process_data(self, loader):
+            try:
+                index, data, label = next(loader[1])
+            except:
+                loader[1] = iter(loader[0])
+                index, data, label = next(loader[1])
+            data = data.to(self.device, non_blocking=True)
+            if not self.multi_input:
+                for task in self.task_name:
+                    label[task] = label[task].to(self.device, non_blocking=True)
+            else:
+                label = label.to(self.device, non_blocking=True)
+            
+            self.data_hist.extend(index.tolist())
+            
+            return data, label
 
         def process_preds(self, preds):
             img_size = (288, 384)
@@ -113,6 +131,8 @@ def main(params):
                           **kwargs)
     if params.mode == 'train':
         NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, params.epochs)
+        with open(f'data_hist_{NYUmodel.wandb_run.id}.csv', 'w') as f:
+            f.write(',\n'.join([str(x) for x in NYUmodel.data_hist]))
     elif params.mode == 'test':
         NYUmodel.test(nyuv2_test_loader)
     else:
