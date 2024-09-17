@@ -169,3 +169,7 @@ wandb/
 #HPC logs
 *.err
 *.out
+examples/nyu/*.npy
+examples/nyu/*.jpg
+examples/nyu/*.csv
+
