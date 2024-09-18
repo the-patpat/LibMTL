@@ -245,6 +245,21 @@ class Trainer(nn.Module):
             self.meter.get_score()
             self.model.train_loss_buffer[:, epoch] = self.meter.loss_item
             self.meter.display(epoch=epoch, mode='train')
+
+            if self.wandb_run is not None:
+                self.wandb_run.log({
+                    'losses' : {
+                        'train': {k : v for k,v in zip(self.meter.task_name,
+                            self.meter.loss_item)}
+                    },
+                    'metrics' : {
+                        'train': {
+                            task : {
+                                metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
+                            } for task in self.meter.task_name
+                        }
+                    }
+                })
             self.meter.reinit()
             
             if val_dataloaders is not None:
@@ -297,7 +312,22 @@ class Trainer(nn.Module):
         self.meter.record_time('end')
         self.meter.get_score()
         self.meter.display(epoch=epoch, mode=mode)
-        improvement = self.meter.improvement
+
+        if self.wandb_run is not None:
+                print('logging metrics and losses')
+                self.wandb_run.log({
+                    'losses' : {
+                        'test': {k : v for k,v in zip(self.meter.task_name,
+                            self.meter.loss_item)}
+                    },
+                    'metrics' : {
+                        'test': {
+                            task : {
+                                metric : value for metric, value in zip(self.meter.task_dict[task]['metrics'], self.meter.results[task])
+                            } for task in self.meter.task_name
+                        }
+                    }
+                })
         self.meter.reinit()
         if return_improvement:
             return improvement
