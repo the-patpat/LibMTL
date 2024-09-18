@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from utils import *
 from aspp import DeepLabHead
 from create_dataset import NYUv2
+import wandb
 
 from LibMTL import Trainer
 from LibMTL.model import resnet_dilated
@@ -20,7 +21,7 @@ def parse_args(parser):
     return parser.parse_args()
     
 def main(params):
-    run = wandb.init()
+    run = wandb.init('NYUv2-MCLGS-reproduce')
 
     kwargs, optim_param, scheduler_param = prepare_args(params)
 
