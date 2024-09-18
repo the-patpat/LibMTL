@@ -7,6 +7,7 @@ from LibMTL._record import _PerformanceMeter
 from LibMTL.utils import count_parameters
 import LibMTL.weighting as weighting_method
 import LibMTL.architecture as architecture_method
+from tqdm import tqdm, trange
 
 class Trainer(nn.Module):
     r'''A Multi-Task Learning Trainer.
@@ -214,7 +215,8 @@ class Trainer(nn.Module):
             self.model.epoch = epoch
             self.model.train()
             self.meter.record_time('begin')
-            for batch_index in range(train_batch):
+            pbar = trange(train_batch)
+            for batch_index in pbar:
                 if not self.multi_input:
                     train_inputs, train_gts = self._process_data(train_loader)
                     train_preds = self.model(train_inputs)
@@ -236,6 +238,8 @@ class Trainer(nn.Module):
                 if w is not None:
                     self.batch_weight[:, epoch, batch_index] = w
                 self.optimizer.step()
+                pbar.set_description(' | '.join(
+                    ['{:.4f}'.format(x._average_loss()) for _, x in self.meter.losses.items()]))
             
             self.meter.record_time('end')
             self.meter.get_score()

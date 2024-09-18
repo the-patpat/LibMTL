@@ -67,6 +67,11 @@ _parser.add_argument('--STCH_mu', type=float, default=1.0, help=' ')
 _parser.add_argument('--STCH_warmup_epoch', type=int, default=4, help=' ')
 ## ExcessMTL
 _parser.add_argument('--robust_step_size', default=1e-2, type=float, help='step size')
+## MCLGS
+_parser.add_argument('--a0', default=40, type=float,
+                     help='magnitude of exponential decay')
+_parser.add_argument('--ra', default=1, type=float,
+                     help='decay rate of exponential decay')
 
 # args for architecture
 ## CGC
@@ -88,7 +93,8 @@ def prepare_args(params):
     kwargs = {'weight_args': {}, 'arch_args': {}}
     if params.weighting in ['EW', 'UW', 'GradNorm', 'GLS', 'RLW', 'MGDA', 'IMTL',
                             'PCGrad', 'GradVac', 'CAGrad', 'GradDrop', 'DWA', 
-                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DB_MTL', 'STCH', 'ExcessMTL']:
+                            'Nash_MTL', 'MoCo', 'Aligned_MTL', 'DB_MTL', 'STCH', 'ExcessMTL', 
+                            'MCLGS']:
         if params.weighting in ['DWA']:
             if params.T is not None:
                 kwargs['weight_args']['T'] = params.T
@@ -145,6 +151,9 @@ def prepare_args(params):
             kwargs['weight_args']['STCH_warmup_epoch'] = params.STCH_warmup_epoch
         elif params.weighting in ['ExcessMTL']:
             kwargs['weight_args']['robust_step_size'] = params.robust_step_size
+        elif params.weighting in ['MCLGS']:
+            kwargs['weight_args']['a0'] = params.a0
+            kwargs['weight_args']['ra'] = params.ra
     else:
         raise ValueError('No support weighting method {}'.format(params.weighting)) 
         

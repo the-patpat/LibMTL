@@ -91,8 +91,8 @@ def main(params):
                           multi_input=params.multi_input,
                           optim_param=optim_param,
                           scheduler_param=scheduler_param,
-                          save_path=params.save_path,
-                          load_path=params.load_path,
+                        #   save_path=params.save_path,
+                        #   load_path=params.load_path,
                           **kwargs)
     if params.mode == 'train':
         NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, params.epochs)
