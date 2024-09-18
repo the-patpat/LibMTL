@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from utils import *
 from aspp import DeepLabHead
 from create_dataset import NYUv2
+from segnet_mtan import SegNet_MTAN_encoder, SegNet_MTAN_decoder
 import wandb
 
 from LibMTL import Trainer
@@ -60,10 +61,14 @@ def main(params):
     
     # define encoder and decoders
     def encoder_class(): 
-        return resnet_dilated('resnet50')
-    num_out_channels = {'segmentation': 13, 'depth': 1, 'normal': 3}
-    decoders = nn.ModuleDict({task: DeepLabHead(2048, 
-                                                num_out_channels[task]) for task in list(task_dict.keys())})
+        return SegNet_MTAN_encoder()
+    decoders = nn.ModuleDict({task: SegNet_MTAN_decoder(task) for task in list(task_dict.keys())})
+
+    # def encoder_class(): 
+    #         return resnet_dilated('resnet50')
+    #     num_out_channels = {'segmentation': 13, 'depth': 1, 'normal': 3}
+    #     decoders = nn.ModuleDict({task: DeepLabHead(2048, 
+    #                                                 num_out_channels[task]) for task in list(task_dict.keys())})
     
     class NYUtrainer(Trainer):
         def __init__(self, task_dict, weighting, architecture, encoder_class, 
