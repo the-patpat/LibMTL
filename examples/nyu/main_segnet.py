@@ -10,6 +10,7 @@ from LibMTL import Trainer
 from LibMTL.model import resnet_dilated
 from LibMTL.utils import set_random_seed, set_device
 from LibMTL.config import LibMTL_args, prepare_args
+import wandb
 
 def parse_args(parser):
     parser.add_argument('--aug', action='store_true', default=False, help='data augmentation')
@@ -21,7 +22,11 @@ def parse_args(parser):
     
 def main(params):
     kwargs, optim_param, scheduler_param = prepare_args(params)
-
+    run = wandb.init(project='NYUv2-MCLGS-reproduce')
+    wandb.config.update({'cli' : params.__dict__,
+                         'optim' : optim_param,
+                         'weight_args' : kwargs['weight_args'], 
+                         'arch_args' : kwargs['arch_args']})
     # prepare dataloaders
     nyuv2_train_set = NYUv2(root=params.dataset_path, mode='train', augmentation=params.aug)
     nyuv2_test_set = NYUv2(root=params.dataset_path, mode='test', augmentation=False)
@@ -71,6 +76,7 @@ def main(params):
                       scheduler_param=scheduler_param,
                       save_path=params.save_path,
                       load_path=params.load_path,
+                      wandb_run=run,
                       **kwargs)
     if params.mode == 'train':
         NYUmodel.train(nyuv2_train_loader, nyuv2_test_loader, params.epochs)

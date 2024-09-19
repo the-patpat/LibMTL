@@ -91,7 +91,7 @@ class Trainer(nn.Module):
         self.scheduler_param = scheduler_param
         self.save_path = save_path
         self.load_path = load_path
-        self.wandb_run = kwargs['wandb_run']
+        self.wandb_run = kwargs['wandb_run'] if 'wandb_run' in kwargs else None
 
         self._prepare_model(weighting, architecture, encoder_class, decoders)
         self._prepare_optimizer(optim_param, scheduler_param)

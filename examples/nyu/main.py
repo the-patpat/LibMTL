@@ -22,10 +22,14 @@ def parse_args(parser):
     return parser.parse_args()
     
 def main(params):
-    run = wandb.init('NYUv2-MCLGS-reproduce')
+    run = wandb.init(project='NYUv2-MCLGS-reproduce')
 
     kwargs, optim_param, scheduler_param = prepare_args(params)
 
+    wandb.config.update({'cli' : params.__dict__,
+                         'optim' : optim_param,
+                         'weight_args' : kwargs['weight_args'], 
+                         'arch_args' : kwargs['arch_args']})
     # prepare dataloaders
     nyuv2_train_set = NYUv2(root=params.dataset_path, mode='train', augmentation=params.aug)
     nyuv2_test_set = NYUv2(root=params.dataset_path, mode='test', augmentation=False)
@@ -34,7 +38,7 @@ def main(params):
         dataset=nyuv2_train_set,
         batch_size=params.train_bs,
         shuffle=True,
-        num_workers=2,
+        num_workers=8,
         pin_memory=True,
         drop_last=True)
     
@@ -42,7 +46,7 @@ def main(params):
         dataset=nyuv2_test_set,
         batch_size=params.test_bs,
         shuffle=False,
-        num_workers=2,
+        num_workers=8,
         pin_memory=True)
     
     # define tasks
@@ -60,15 +64,15 @@ def main(params):
                             'weight': [0, 0, 1, 1, 1]}}
     
     # define encoder and decoders
-    def encoder_class(): 
-        return SegNet_MTAN_encoder()
-    decoders = nn.ModuleDict({task: SegNet_MTAN_decoder(task) for task in list(task_dict.keys())})
-
     # def encoder_class(): 
-    #         return resnet_dilated('resnet50')
-    #     num_out_channels = {'segmentation': 13, 'depth': 1, 'normal': 3}
-    #     decoders = nn.ModuleDict({task: DeepLabHead(2048, 
-    #                                                 num_out_channels[task]) for task in list(task_dict.keys())})
+    #     return SegNet_MTAN_encoder()
+    # decoders = nn.ModuleDict({task: SegNet_MTAN_decoder(task) for task in list(task_dict.keys())})
+
+    def encoder_class(): 
+        return resnet_dilated('resnet50')
+    num_out_channels = {'segmentation': 13, 'depth': 1, 'normal': 3}
+    decoders = nn.ModuleDict({task: DeepLabHead(2048, 
+                                                num_out_channels[task]) for task in list(task_dict.keys())})
     
     class NYUtrainer(Trainer):
         def __init__(self, task_dict, weighting, architecture, encoder_class, 
